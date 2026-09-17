@@ -6,6 +6,7 @@
 
 String truncated(const char *s, size_t maxLen);
 String formatDuration(long totalSeconds);
+String formatRate(float bytesPerSec);
 
 void drawWarningIcon(Adafruit_SSD1306 &d, int x, int y, int size);
 

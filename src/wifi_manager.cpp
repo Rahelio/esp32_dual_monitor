@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_task_wdt.h>
 
 #include "display_hw.h"
 #include "secrets.h"
@@ -16,6 +17,8 @@ void connectWiFi() {
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+    esp_task_wdt_reset();  // this loop can legitimately run for a while
+                            // during a real outage -- that's not a hang
     Serial.print(".");
     if (millis() - start > 20000) {
       Serial.println("\nWiFi connect timed out, retrying...");

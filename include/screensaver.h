@@ -6,6 +6,17 @@
 // (e.g. mid-animation, or a half-elapsed Pong interlude).
 void enterScreensaver();
 
+// True once at least SCREENSAVER_TICK_MS has elapsed since the screensaver
+// was last redrawn (or since forceImmediateRedraw() was last called). Call
+// renderScreensaver() only when this returns true -- it also resets the
+// internal clock, so call it at most once per loop() iteration.
+bool screensaverTickDue();
+
+// Forces the next screensaverTickDue() call to return true. Used when
+// something changes that the screensaver should reflect right away (e.g.
+// toggling the manual dim override) rather than waiting out the tick.
+void forceImmediateRedraw();
+
 // Draws one frame of the idle screensaver -- a live clock (NTP-synced,
 // DST-aware) with a bouncing DVD-logo icon on the left, and on the right a
 // repeating cycle of weather interleaved with full-screen animations. Every

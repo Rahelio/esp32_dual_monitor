@@ -28,10 +28,11 @@
 //
 // Implementation is split across src/*.cpp by concern -- see each file's
 // own header comment for what it owns:
+//   watchdog       - task watchdog, reboots on a hung main loop
 //   display_hw     - the two SSD1306 panels + I2C buses
 //   draw_helpers   - small reusable drawing/formatting primitives
 //   wifi_manager   - WiFi connect/reconnect
-//   time_sync      - NTP sync + night dimming
+//   time_sync      - NTP sync + night/manual dimming
 //   weather        - Open-Meteo fetch
 //   dashboard      - aggregator fetch + data-mode item/paging state
 //   dashboard_view - data-mode rendering (renderCurrentItem)
@@ -42,6 +43,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <esp_task_wdt.h>
 
 #include "button.h"
 #include "config.h"
@@ -51,19 +53,21 @@
 #include "mode.h"
 #include "screensaver.h"
 #include "time_sync.h"
+#include "watchdog.h"
 #include "weather.h"
 #include "wifi_manager.h"
 
 namespace {
 unsigned long lastWeatherFetch = 0;
 unsigned long lastNightCheck = 0;
-unsigned long lastScreensaverTick = 0;
 }  // namespace
 
 void setup() {
   Serial.begin(115200);
   delay(1500);  // give native-USB serial a moment to enumerate
   Serial.println("\nDashboard firmware starting");
+
+  setupWatchdog();  // armed before anything that could conceivably hang
 
   Wire.begin(DISP1_SDA, DISP1_SCL);
   I2CBus2.begin(DISP2_SDA, DISP2_SCL);
@@ -75,6 +79,7 @@ void setup() {
                     "wiring, power, and that both modules are on 0x3C.");
   }
   delay(1000);
+  showBootSplash();
 
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
 
@@ -102,6 +107,7 @@ void setup() {
 }
 
 void loop() {
+  esp_task_wdt_reset();
   ensureWiFiConnected();
   handleButton();
 
@@ -133,8 +139,7 @@ void loop() {
 
   if (currentMode == MODE_DATA) {
     if (millis() - lastActivityMs >= IDLE_TIMEOUT_MS) {
-      enterScreensaver();
-      lastScreensaverTick = 0;  // force an immediate draw
+      enterScreensaver();  // also forces an immediate screensaver redraw
     } else if (dashboardValid && itemCount > 0 &&
                millis() - lastPageSwitch >= PAGE_INTERVAL_MS) {
       lastPageSwitch = millis();
@@ -142,8 +147,7 @@ void loop() {
       renderCurrentItem();
     }
   } else {  // MODE_SCREENSAVER
-    if (millis() - lastScreensaverTick >= SCREENSAVER_TICK_MS) {
-      lastScreensaverTick = millis();
+    if (screensaverTickDue()) {
       renderScreensaver();
     }
   }

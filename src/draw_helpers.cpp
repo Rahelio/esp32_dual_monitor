@@ -15,6 +15,15 @@ String formatDuration(long totalSeconds) {
   return String(hours) + "h " + String(minutes) + "m";
 }
 
+String formatRate(float bytesPerSec) {
+  if (bytesPerSec >= 1024.0f * 1024.0f) {
+    return String(bytesPerSec / (1024.0f * 1024.0f), 1) + "M";
+  } else if (bytesPerSec >= 1024.0f) {
+    return String(bytesPerSec / 1024.0f, 0) + "K";
+  }
+  return String((int)bytesPerSec) + "B";
+}
+
 void drawWarningIcon(Adafruit_SSD1306 &d, int x, int y, int size) {
   d.drawTriangle(x, y + size, x + size / 2, y, x + size, y + size, SSD1306_WHITE);
   d.fillRect(x + size / 2 - 1, y + size / 3, 2, size / 3, SSD1306_WHITE);

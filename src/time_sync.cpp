@@ -8,6 +8,8 @@
 
 namespace {
 bool nightDimActive = false;
+bool manualMuteActive = false;
+bool dimApplied = false;  // what's actually been sent to the displays so far
 
 bool isNightHour(int hour) {
   if (NIGHT_DIM_START_HOUR > NIGHT_DIM_END_HOUR) {
@@ -15,6 +17,20 @@ bool isNightHour(int hour) {
     return hour >= NIGHT_DIM_START_HOUR || hour < NIGHT_DIM_END_HOUR;
   }
   return hour >= NIGHT_DIM_START_HOUR && hour < NIGHT_DIM_END_HOUR;
+}
+
+// Combines the schedule and the on-demand override into one applied state --
+// dim if EITHER wants it dim -- and only touches the displays' contrast on
+// an actual change, not every check.
+void applyDimState() {
+  bool shouldDim = nightDimActive || manualMuteActive;
+  if (shouldDim != dimApplied) {
+    dimApplied = shouldDim;
+    display1.dim(dimApplied);
+    display2.dim(dimApplied);
+    Serial.printf("Display dim %s (night=%d, manual=%d)\n", dimApplied ? "ON" : "OFF",
+                  nightDimActive, manualMuteActive);
+  }
 }
 }  // namespace
 
@@ -38,13 +54,18 @@ bool syncTime() {
 void updateNightDimming() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo, 0)) return;  // no time yet -- leave brightness as-is
-
-  bool night = isNightHour(timeinfo.tm_hour);
-  if (night != nightDimActive) {
-    nightDimActive = night;
-    display1.dim(nightDimActive);
-    display2.dim(nightDimActive);
-    Serial.printf("Night dimming %s (hour=%d)\n", nightDimActive ? "ON" : "OFF",
-                  timeinfo.tm_hour);
-  }
+  nightDimActive = isNightHour(timeinfo.tm_hour);
+  applyDimState();
 }
+
+void toggleManualDim() {
+  manualMuteActive = !manualMuteActive;
+  applyDimState();
+}
+
+void clearManualDim() {
+  manualMuteActive = false;
+  applyDimState();
+}
+
+bool isManualDimActive() { return manualMuteActive; }

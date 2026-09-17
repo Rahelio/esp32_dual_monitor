@@ -77,6 +77,8 @@ void updateAndDrawDvdBounce(Adafruit_SSD1306 &d, float dt) {
 }  // namespace
 
 // ---- Right-display page cycle: weather interleaved with animations ----
+// STARFIELD and RAIN are purely decorative; PULSE, LOADBARS, FLEET and TREND
+// are all driven by the live dashboard data (see animations.cpp).
 namespace {
 enum RightPage {
   RP_WEATHER,
@@ -84,14 +86,15 @@ enum RightPage {
   RP_ANIM_PULSE,
   RP_ANIM_LOADBARS,
   RP_ANIM_FLEET,
+  RP_ANIM_TREND,
   RP_ANIM_RAIN,
 };
 const RightPage RIGHT_PAGE_SEQUENCE[] = {
   RP_WEATHER, RP_ANIM_STARFIELD, RP_WEATHER, RP_ANIM_PULSE,
   RP_WEATHER, RP_ANIM_LOADBARS,  RP_WEATHER, RP_ANIM_FLEET,
-  RP_WEATHER, RP_ANIM_RAIN,
+  RP_WEATHER, RP_ANIM_TREND,     RP_WEATHER, RP_ANIM_RAIN,
 };
-const int RIGHT_PAGE_COUNT = 10;
+const int RIGHT_PAGE_COUNT = 12;
 const unsigned long RIGHT_PAGE_DURATION_MS = 5000;
 int rightPageIndex = 0;
 unsigned long lastRightPageSwitch = 0;
@@ -245,11 +248,26 @@ void renderScreensaverAlert(const String &name, long downSeconds) {
 // frame after waking from an idle MODE_DATA stretch) doesn't jump.
 namespace {
 unsigned long lastScreensaverUpdateMs = 0;
+
+// Gates how often loop() calls renderScreensaver() -- separate from
+// lastScreensaverUpdateMs above, which drives dt *within* a redraw.
+unsigned long lastScreensaverTick = 0;
 }  // namespace
+
+bool screensaverTickDue() {
+  if (millis() - lastScreensaverTick >= SCREENSAVER_TICK_MS) {
+    lastScreensaverTick = millis();
+    return true;
+  }
+  return false;
+}
+
+void forceImmediateRedraw() { lastScreensaverTick = 0; }
 
 void enterScreensaver() {
   Serial.println("Idle timeout -- entering screensaver");
   currentMode = MODE_SCREENSAVER;
+  forceImmediateRedraw();
   lastScreensaverUpdateMs = 0;  // dt starts fresh, no bogus first-frame jump
   rightPageIndex = 0;           // always wake into weather, not mid-animation
   lastRightPageSwitch = 0;
@@ -332,6 +350,9 @@ void renderScreensaver() {
       break;
     case RP_ANIM_FLEET:
       renderFleetGrid(display2, dt);
+      break;
+    case RP_ANIM_TREND:
+      renderTrend(display2, dt);
       break;
     case RP_ANIM_RAIN:
       renderMatrixRain(display2, dt);

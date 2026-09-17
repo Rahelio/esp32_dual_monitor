@@ -8,6 +8,7 @@
 #include "config.h"
 #include "dashboard.h"
 #include "display_hw.h"
+#include "draw_helpers.h"
 
 namespace {
 
@@ -163,11 +164,12 @@ void renderSystemPulse(Adafruit_SSD1306 &d, float dt) {
 
 // ---- Load Bars: two full-width horizontal progress bars for host CPU% and
 // MEM%, each eased toward its live value, labeled directly above the bar
-// they belong to. This replaces an earlier concentric-arc "gauge" design --
-// hand-computed circles from trig just don't have enough pixels to read
-// cleanly at this radius on a 128x64 1-bit panel (no anti-aliasing, and two
-// close radii blur into each other). Axis-aligned rectangles stay crisp at
-// any resolution, so bars are the more honest fit for a screen this small. ----
+// they belong to, plus a network throughput line underneath. This replaces
+// an earlier concentric-arc "gauge" design -- hand-computed circles from
+// trig just don't have enough pixels to read cleanly at this radius on a
+// 128x64 1-bit panel (no anti-aliasing, and two close radii blur into each
+// other). Axis-aligned rectangles stay crisp at any resolution, so bars are
+// the more honest fit for a screen this small. ----
 namespace {
 float loadBarCpuDisplay = 0, loadBarMemDisplay = 0;  // eased 0-100
 
@@ -185,11 +187,16 @@ void drawLoadBar(Adafruit_SSD1306 &d, int x, int y, int w, int h, const char *la
 
 void renderLoadBars(Adafruit_SSD1306 &d, float dt) {
   float targetCpu = 0, targetMem = 0;
+  float netRx = -1, netTx = -1;  // -1 = not available from this aggregator
   if (dashboardValid) {
     JsonObject host = dashboardDoc["host"];
     if (!host.isNull()) {
       targetCpu = host["cpu_percent"] | 0.0;
       targetMem = host["mem_percent"] | 0.0;
+      if (!host["network_rx_bytes_per_sec"].isNull()) {
+        netRx = host["network_rx_bytes_per_sec"] | 0.0;
+        netTx = host["network_tx_bytes_per_sec"] | 0.0;
+      }
     }
   }
 
@@ -197,10 +204,22 @@ void renderLoadBars(Adafruit_SSD1306 &d, float dt) {
   easeToward(loadBarCpuDisplay, targetCpu, LOAD_BAR_SPEED, dt);
   easeToward(loadBarMemDisplay, targetMem, LOAD_BAR_SPEED, dt);
 
-  const int barW = 110, barH = 14;
+  const int barW = 110, barH = 12;
   const int x = (SCREEN_WIDTH - barW) / 2;
-  drawLoadBar(d, x, 18, barW, barH, "CPU", loadBarCpuDisplay);
-  drawLoadBar(d, x, 44, barW, barH, "MEM", loadBarMemDisplay);
+  drawLoadBar(d, x, 9, barW, barH, "CPU", loadBarCpuDisplay);
+  drawLoadBar(d, x, 33, barW, barH, "MEM", loadBarMemDisplay);
+
+  d.setTextSize(1);
+  d.setCursor(x, 52);
+  if (netRx >= 0) {
+    d.print("R:");
+    d.print(formatRate(netRx));
+    d.print("/s T:");
+    d.print(formatRate(netTx));
+    d.print("/s");
+  } else {
+    d.print("NET n/a");
+  }
 }
 
 // ---- Matrix rain: independent falling columns of random characters,
@@ -374,4 +393,64 @@ void renderFleetGrid(Adafruit_SSD1306 &d, float dt) {
       d.drawRect(x, y, w, h, SSD1306_WHITE);
     }
   }
+}
+
+// ---- Trend: the only page that isn't just the current instant -- draws a
+// small line chart through the aggregator's recent host_history samples, so
+// you can tell "climbing" from "steady" from "just spiked" at a glance
+// instead of only ever seeing a single snapshot. Scaled to the min/max
+// within the visible window, not a fixed 0-100 range, so a quiet host isn't
+// a flat line pinned at the bottom. ----
+namespace {
+void drawSparkline(Adafruit_SSD1306 &d, int x, int y, int w, int h, JsonArray values) {
+  int n = values.size();
+  if (n < 2) return;
+
+  float minV = values[0];
+  float maxV = values[0];
+  for (JsonVariant v : values) {
+    float f = v.as<float>();
+    if (f < minV) minV = f;
+    if (f > maxV) maxV = f;
+  }
+  float range = maxV - minV;
+  if (range < 1.0f) range = 1.0f;  // avoid a divide-by-zero flatline
+
+  int prevX = x;
+  int prevY = y + h - (int)(((float)values[0].as<float>() - minV) / range * h);
+  for (int i = 1; i < n; i++) {
+    int px = x + (int)((float)i / (n - 1) * w);
+    float v = values[i].as<float>();
+    int py = y + h - (int)((v - minV) / range * h);
+    d.drawLine(prevX, prevY, px, py, SSD1306_WHITE);
+    prevX = px;
+    prevY = py;
+  }
+}
+}  // namespace
+
+void renderTrend(Adafruit_SSD1306 &d, float dt) {
+  (void)dt;  // driven entirely by the aggregator's history, not local motion
+
+  JsonObject history;
+  if (dashboardValid) history = dashboardDoc["host_history"];
+  JsonArray cpuHist = history["cpu_percent"];
+  JsonArray memHist = history["mem_percent"];
+
+  if (history.isNull() || cpuHist.size() < 2) {
+    d.setTextSize(1);
+    d.setCursor(0, 20);
+    d.println("Not enough");
+    d.println("trend data yet");
+    return;
+  }
+
+  d.setTextSize(1);
+  d.setCursor(0, 0);
+  d.print("CPU trend");
+  drawSparkline(d, 0, 9, SCREEN_WIDTH, 18, cpuHist);
+
+  d.setCursor(0, 32);
+  d.print("MEM trend");
+  drawSparkline(d, 0, 41, SCREEN_WIDTH, 18, memHist);
 }

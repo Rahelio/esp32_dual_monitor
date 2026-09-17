@@ -31,3 +31,15 @@ void showStatus(const String &line1, const String &line2) {
   display1.println(line2);
   display1.display();
 }
+
+void showBootSplash() {
+  display2.clearDisplay();
+  display2.setTextColor(SSD1306_WHITE);
+  display2.setTextSize(2);
+  display2.setCursor(4, 20);
+  display2.println("DASHBOARD");
+  display2.setTextSize(1);
+  display2.setCursor(20, 44);
+  display2.println("starting up...");
+  display2.display();
+}

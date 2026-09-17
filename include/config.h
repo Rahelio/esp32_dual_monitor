@@ -25,7 +25,7 @@ const unsigned long FETCH_INTERVAL_MS = 15000;
 const unsigned long PAGE_INTERVAL_MS = 5000;
 
 // ---- Idle / screensaver ----
-const unsigned long IDLE_TIMEOUT_MS = 10UL * 1000UL;  // 10 seconds
+const unsigned long IDLE_TIMEOUT_MS = 10UL * 60UL * 1000UL;  // 10 minutes
 // Redraw ~6-7x/sec -- fast enough for the animations to read as motion
 // rather than a slideshow, still comfortably cheap for two mono I2C panels.
 const unsigned long SCREENSAVER_TICK_MS = 150;
@@ -34,8 +34,10 @@ const unsigned long SCREENSAVER_TICK_MS = 150;
 // ever moves. ----
 const char *const TZ_STRING = "GMT0BST,M3.5.0/1,M10.5.0";
 
-// ---- Night dimming: lower OLED contrast overnight so the panels aren't
-// glaring in a dark room. Window wraps past midnight (22 -> 7). ----
+// ---- Dimming: lower OLED contrast overnight (scheduled) or on demand
+// (hold BOOT from the screensaver) so the panels aren't glaring in a dark
+// room either way -- see time_sync.h. Night window wraps past midnight
+// (22 -> 7). ----
 const int NIGHT_DIM_START_HOUR = 22;  // 10pm
 const int NIGHT_DIM_END_HOUR = 7;     // 7am
 const unsigned long NIGHT_CHECK_INTERVAL_MS = 30UL * 1000UL;
